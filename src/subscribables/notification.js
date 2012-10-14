@@ -15,7 +15,8 @@ ko.notification = (function () {
     }
 
     return {
-        coalesce: function (callback) {
+        coalesce: function (callback, target) {
+            callback = target ? callback.bind(target) : callback;
             ++_transactions;
             try {
                 callback();
