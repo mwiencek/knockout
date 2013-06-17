@@ -1,47 +1,49 @@
 ko.notification = (function () {
-    var _transactions = 0, _callbackUid = 0,
-        _notifications = [], _notificationsByCallback = {};
+    var transactions = 0,
+        callbackUid = 0,
+        allNotifications = [],
+        notificationsByCallback = {},
+        uidProp = "__ko_uid__";
 
     function notifySubscribers () {
-        var notification, subscription;
-
-        while (notification = _notifications.shift()) {
-            delete _notificationsByCallback[notification.key];
-            subscription = notification.subscription;
+        ko.utils.arrayForEach(allNotifications, function (notification) {
+            delete notificationsByCallback[notification.key];
+            var subscription = notification.subscription;
 
             if (subscription.isDisposed !== true)
                 subscription.callback(notification.valueToNotify);
-        }
+        });
+        allNotifications = [];
     }
 
     return {
         coalesce: function (callback, target) {
-            callback = target ? callback.bind(target) : callback;
-            ++_transactions;
-            try {
-                callback();
-            } finally {
-                if (_transactions == 1)
-                    ko.dependencyDetection.ignore(notifySubscribers);
-                --_transactions;
-            }
+            ++transactions;
+            callback.call(target || null);
+
+            if (--transactions === 0)
+                ko.dependencyDetection.ignore(notifySubscribers);
         },
 
         send: function (subscription, valueToNotify, event) {
-            if (_transactions == 0) {
+            if (transactions === 0) {
                 subscription.callback(valueToNotify);
                 return;
             }
-            var uid = subscription.callback.__ko_uid__, notification, key;
-            if (!uid) subscription.callback.__ko_uid__ = uid = ++_callbackUid;
-            key = uid + "." + event;
+            var uid = subscription.callback[uidProp];
+            if (uid === undefined)
+                subscription.callback[uidProp] = uid = ++callbackUid;
 
-            if (notification = _notificationsByCallback[key]) {
-                if (notification.valueToNotify !== valueToNotify)
-                    notification.valueToNotify = valueToNotify;
+            var key = uid + "." + event,
+                notification = notificationsByCallback[key];
+
+            if (notification) {
+                notification.valueToNotify = valueToNotify;
             } else {
-                _notifications.push(_notificationsByCallback[key] = {
-                    subscription: subscription, valueToNotify: valueToNotify, key: key
+                allNotifications.push(notificationsByCallback[key] = {
+                    key: key,
+                    subscription: subscription,
+                    valueToNotify: valueToNotify
                 });
             }
         }
